@@ -7,6 +7,7 @@ pub enum StorageError {
     HeapFSync(String),
     HeapRead(String),
     HeapCorruptedRecord(String),
+    ListChainCorruptedRecord(String),
 }
 
 impl StorageError {
@@ -20,6 +21,9 @@ impl StorageError {
             StorageError::HeapRead(msg) => format!("HeapRead: {}", msg),
             StorageError::HeapCorruptedRecord(msg) => {
                 format!("HeapCorruptedRecord: {}", msg)
+            },
+            StorageError::ListChainCorruptedRecord(msg) => {
+                format!("ListChainCorruptedRecord: {}", msg)
             }
         }
     }

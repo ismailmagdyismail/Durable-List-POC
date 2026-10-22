@@ -41,6 +41,14 @@ where
         Ok(heap_storage)
     }
 
+    // - will be used by WAL most likely so that operations are idempotent (Redo Operations)
+    // - or maybe we have a MONOTONIC id for each value in the heap, (kinda like size),
+    // - that ID is shared between WAL, HEAP storage file
+    // - WAL knows offset via that ID OR it can tell HeapStorage to write at that specific ID location
+    // - BUT THIS MIGHT VIOLATE APPEND ONLY RULE A-BIT, SINCE ON RECOVERY WE MIGHT BE OVERWRITING AN ALREADY APPENDED LOG
+    // at the specific offset
+    // pub fn write_at_offset()
+
     pub fn append_records_batch(&mut self, records: &[T::RecordType]) -> Result<u64, StorageError> {
         let mut encoded_buffer = Vec::new();
         let record_size = self.writer.get_record_size() as usize;
