@@ -1,6 +1,11 @@
+use std::{path::PathBuf, thread::sleep, time::Duration};
+
 use Durable_LinkedList::{
+    flusher::FlushWorker,
     heap_storage::HeapStorage,
     list_chain_view_storage::{ListChainNode, ListChainViewStorage},
+    storage_engine::MockLogFileStorageEngine,
+    write_buffer::WriteBuffer,
 };
 
 fn main() {
@@ -44,4 +49,16 @@ fn main() {
             break;
         }
     }
+
+    let mut path = PathBuf::new();
+    path.push("memtable.dat");
+    let storage = MockLogFileStorageEngine::new(path).unwrap();
+    let flusher = FlushWorker::new(storage);
+    let mut memtable = WriteBuffer::new(10, flusher);
+    for i in 0..10 {
+        println!("insert node {} , {} ", i, i + 1);
+        memtable.insert_node(i, (i + 1) as i32);
+    }
+
+    sleep(Duration::from_millis(10));
 }
