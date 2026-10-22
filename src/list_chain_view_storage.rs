@@ -66,9 +66,24 @@ impl SequentialReader for ListChainViewStorage {
         &self,
         slice: &[u8],
     ) -> Result<Self::RecordType, crate::storage_errors::StorageError> {
-        let prev_slice = &slice[0..PREV_OFFSET as usize];
-        let node_slice = &slice[PREV_OFFSET as usize..PREV_OFFSET as usize + NODE_OFFSET as usize];
-        let next_slice = &slice[PREV_OFFSET as usize + NODE_OFFSET as usize..RECORD_SIZE as usize];
+        let prev_end = PREV_OFFSET as usize;
+        let node_end = prev_end + NODE_OFFSET as usize;
+        let next_end = RECORD_SIZE as usize;
+        let prev_slice = slice.get(0..prev_end).ok_or_else(|| {
+            crate::storage_errors::StorageError::ListChainCorruptedRecord(
+                "Corrupted prev_offset".to_string(),
+            )
+        })?;
+        let node_slice = slice.get(prev_end..node_end).ok_or_else(|| {
+            crate::storage_errors::StorageError::ListChainCorruptedRecord(
+                "Corrupted node_offset".to_string(),
+            )
+        })?;
+        let next_slice = slice.get(node_end..next_end).ok_or_else(|| {
+            crate::storage_errors::StorageError::ListChainCorruptedRecord(
+                "Corrupted next_offset".to_string(),
+            )
+        })?;
         let prev_offset = u64::from_le_bytes(prev_slice.try_into().map_err(|_| {
             crate::storage_errors::StorageError::ListChainCorruptedRecord(
                 "Corrupted prev_offset".to_string(),
