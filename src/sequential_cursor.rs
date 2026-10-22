@@ -4,54 +4,46 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{storage_codec::StorageDecoder, storage_errors::StorageError};
+use crate::storage_errors::StorageError;
 
-pub struct SequentialCursor<T>
-where
-    T: StorageDecoder,
-{
-    buff_reader: BufReader<File>,
-    reader: T,
+pub struct SequentialCursor {
+    reader: BufReader<File>,
 }
 
-impl<T> SequentialCursor<T>
-where
-    T: StorageDecoder,
-    T::ReaderType: StorageDecoder,
-{
-    pub fn new(
-        file_path: PathBuf,
-    ) -> Result<SequentialCursor<<T as StorageDecoder>::ReaderType>, StorageError> {
-        let mut options = OpenOptions::new();
-        let file = options.read(true).open(file_path).map_err(|err| {
-            return StorageError::HeadDataFile(err.to_string());
-        })?;
-        let buff_reader = BufReader::new(file);
-        let cursor = SequentialCursor {
-            buff_reader,
-            reader: T::new(),
-        };
-        Ok(cursor)
+impl SequentialCursor {
+    pub fn open(file_path: PathBuf) -> Result<Self, StorageError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .open(file_path)
+            .map_err(|error| StorageError::Open(error.to_string()))?;
+
+        Ok(Self {
+            reader: BufReader::new(file),
+        })
     }
 
-    pub fn next_record(&mut self) -> Result<Option<T::RecordType>, StorageError> {
-        let mut buffer = Vec::new();
-        let record_size = self.reader.get_record_size() as usize;
-        buffer.resize(record_size as usize, b'0');
-
-        let size = self
-            .buff_reader
-            .read(&mut buffer)
-            .map_err(|err| StorageError::HeapRead(err.to_string()))?;
-
-        if size == 0 {
-            return Ok(None);
+    pub fn next_record(&mut self, record_size: usize) -> Result<Option<Vec<u8>>, StorageError> {
+        if record_size == 0 {
+            return Err(StorageError::InvalidRecordSize);
         }
 
-        assert!(size == record_size);
+        let mut bytes = vec![0; record_size];
+        let mut bytes_read = 0;
 
-        let decoded_record = self.reader.decode_record(&buffer)?;
+        while bytes_read < record_size {
+            match self.reader.read(&mut bytes[bytes_read..]) {
+                Ok(0) if bytes_read == 0 => return Ok(None),
+                Ok(0) => {
+                    return Err(StorageError::TruncatedRecord {
+                        expected: record_size,
+                        actual: bytes_read,
+                    });
+                }
+                Ok(read) => bytes_read += read,
+                Err(error) => return Err(StorageError::Read(error.to_string())),
+            }
+        }
 
-        Ok(Some(decoded_record))
+        Ok(Some(bytes))
     }
 }

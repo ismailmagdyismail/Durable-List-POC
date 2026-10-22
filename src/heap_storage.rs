@@ -1,13 +1,16 @@
-use crate::{
-    storage_codec::{StorageDecoder, StorageEncoder},
-    storage_errors::StorageError,
-};
 use std::path::PathBuf;
 
-pub const RECORD_SIZE: u8 = 4;
+use crate::{
+    heap_records_codec::HeapRecordsCodec,
+    sequential_cursor::SequentialCursor, append_storage_writer::AppendStorageWriter,
+    storage_errors::StorageError,
+};
 
 #[derive(Debug)]
-pub struct HeapStorage {}
+pub struct HeapStorage {
+    file_path: PathBuf,
+    access: AppendStorageWriter,
+}
 
 impl HeapStorage {
     pub fn create_heap_file_path(storage_dir: &str) -> PathBuf {
@@ -15,53 +18,73 @@ impl HeapStorage {
         file_path.push(HEAP_FILE_NAME);
         file_path
     }
-}
 
-impl StorageEncoder for HeapStorage {
-    type ReaderType = HeapStorage;
-    type RecordType = i32;
+    pub fn open(file_path: PathBuf) -> Result<Self, StorageError> {
+        let access = AppendStorageWriter::open(file_path.clone())?;
 
-    fn get_record_size(&self) -> u8 {
-        RECORD_SIZE
+        Ok(Self { file_path, access })
     }
 
-    fn new() -> Self::ReaderType {
-        HeapStorage {}
+    pub fn append(&mut self, records: &[i32]) -> Result<u64, StorageError> {
+        let mut bytes = Vec::with_capacity(records.len() * HeapRecordsCodec::RECORD_SIZE);
+        for record in records {
+            bytes.extend_from_slice(&HeapRecordsCodec::encode_record(*record));
+        }
+
+        self.access.append(&bytes)
     }
 
-    fn encode_record(&self, record: &Self::RecordType, slice: &mut [u8]) {
-        slice.copy_from_slice(&record.to_le_bytes());
-    }
-}
-
-impl StorageDecoder for HeapStorage {
-    type ReaderType = HeapStorage;
-    type RecordType = i32;
-
-    fn get_record_size(&self) -> u8 {
-        RECORD_SIZE
+    pub fn sync(&mut self) -> Result<(), StorageError> {
+        self.access.sync()
     }
 
-    fn new() -> Self::ReaderType {
-        HeapStorage {}
-    }
-
-    fn decode_record(&self, buffer: &[u8]) -> Result<Self::RecordType, StorageError> {
-        let decoded_record = i32::from_le_bytes(buffer.try_into().map_err(|_| {
-            StorageError::HeapCorruptedRecord("Couldn't convert record to i32".to_string())
-        })?);
-
-        Ok(decoded_record)
+    pub fn cursor(&mut self) -> Result<HeapCursor, StorageError> {
+        self.access.flush()?;
+        HeapCursor::open(self.file_path.clone())
     }
 }
 
-pub const HEAP_FILE_NAME: &'static str = "heap.dat";
+pub struct HeapCursor {
+    cursor: SequentialCursor,
+}
+
+impl HeapCursor {
+    pub fn open(file_path: PathBuf) -> Result<Self, StorageError> {
+        Ok(Self {
+            cursor: SequentialCursor::open(file_path)?,
+        })
+    }
+
+    pub fn next_record(&mut self) -> Result<Option<i32>, StorageError> {
+        let Some(bytes) = self.cursor.next_record(HeapRecordsCodec::RECORD_SIZE)? else {
+            return Ok(None);
+        };
+
+        HeapRecordsCodec::decode_record(&bytes).map(Some)
+    }
+}
+
+pub const HEAP_FILE_NAME: &str = "heap.dat";
 
 #[cfg(test)]
 mod tests {
-    use crate::storage_codec::StorageDecoder;
+    use std::{
+        env, fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     use super::*;
+
+    fn test_file_path(name: &str) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        env::temp_dir().join(format!(
+            "durable-linked-list-{name}-{}-{timestamp}.dat",
+            std::process::id()
+        ))
+    }
 
     #[test]
     fn creates_heap_path_in_storage_directory() {
@@ -72,34 +95,22 @@ mod tests {
     }
 
     #[test]
-    fn reports_four_byte_records_for_reading_and_writing() {
-        let writer = <HeapStorage as StorageEncoder>::new();
-        let reader = <HeapStorage as StorageDecoder>::new();
+    fn appends_and_reads_heap_records_through_the_facade() {
+        let file_path = test_file_path("heap");
+        let mut storage = HeapStorage::open(file_path.clone()).unwrap();
 
-        assert_eq!(StorageEncoder::get_record_size(&writer), RECORD_SIZE);
-        assert_eq!(StorageDecoder::get_record_size(&reader), RECORD_SIZE);
-    }
+        assert_eq!(storage.append(&[1, -2]).unwrap(), 0);
+        assert_eq!(storage.append(&[3]).unwrap(), 8);
+        storage.sync().unwrap();
 
-    #[test]
-    fn encodes_and_decodes_i32_values_as_little_endian() {
-        let writer = <HeapStorage as StorageEncoder>::new();
-        let reader = <HeapStorage as StorageDecoder>::new();
+        let mut cursor = storage.cursor().unwrap();
+        assert_eq!(cursor.next_record().unwrap(), Some(1));
+        assert_eq!(cursor.next_record().unwrap(), Some(-2));
+        assert_eq!(cursor.next_record().unwrap(), Some(3));
+        assert_eq!(cursor.next_record().unwrap(), None);
 
-        for record in [0, 1, -1, i32::MIN, i32::MAX] {
-            let mut buffer = [0; RECORD_SIZE as usize];
-            writer.encode_record(&record, &mut buffer);
-
-            assert_eq!(buffer, record.to_le_bytes());
-            assert_eq!(reader.decode_record(&buffer).unwrap(), record);
-        }
-    }
-
-    #[test]
-    fn rejects_records_that_are_not_four_bytes() {
-        let reader = <HeapStorage as StorageDecoder>::new();
-
-        let error = reader.decode_record(&[0; 3]).unwrap_err();
-
-        assert!(matches!(error, StorageError::HeapCorruptedRecord(_)));
+        drop(cursor);
+        drop(storage);
+        fs::remove_file(file_path).unwrap();
     }
 }

@@ -1,22 +1,17 @@
 use Durable_LinkedList::{
     heap_storage::HeapStorage,
     list_chain_view_storage::{ListChainNode, ListChainViewStorage},
-    sequential_cursor::SequentialCursor,
-    sequential_storage::SequentialStorage,
 };
 
 fn main() {
     std::fs::create_dir_all("durable_list").unwrap();
     let mut storage =
-        SequentialStorage::<HeapStorage>::new(HeapStorage::create_heap_file_path("durable_list"))
-            .unwrap();
-    let offset = storage.append_records_batch(&[1, 2, 3, 4]).unwrap();
+        HeapStorage::open(HeapStorage::create_heap_file_path("durable_list")).unwrap();
+    let offset = storage.append(&[1, 2, 3, 4]).unwrap();
     storage.sync().unwrap();
     println!("offset is {}", offset);
 
-    let mut cursor =
-        SequentialCursor::<HeapStorage>::new(HeapStorage::create_heap_file_path("durable_list"))
-            .unwrap();
+    let mut cursor = storage.cursor().unwrap();
     while let Ok(res) = cursor.next_record() {
         if let Some(record) = res {
             println!("record is {}", record)
@@ -26,7 +21,7 @@ fn main() {
         }
     }
 
-    let mut chain_storage = SequentialStorage::<ListChainViewStorage>::new(
+    let mut chain_storage = ListChainViewStorage::open(
         ListChainViewStorage::create_list_chain_file_path("durable_list"),
     )
     .unwrap();
@@ -36,12 +31,9 @@ fn main() {
         node_offset: 0,
         next_offset: 4,
     }];
-    chain_storage.append_records_batch(&list).unwrap();
-    let mut cursor = SequentialCursor::<ListChainViewStorage>::new(
-        ListChainViewStorage::create_list_chain_file_path("durable_list"),
-    )
-    .unwrap();
+    chain_storage.append(&list).unwrap();
     chain_storage.sync().unwrap();
+    let mut cursor = chain_storage.cursor().unwrap();
     while let Ok(res) = cursor.next_record() {
         if let Some(record) = res {
             println!("prev_offset is {}", record.prev_offset);

@@ -1,30 +1,43 @@
+use std::fmt;
+
 #[derive(Debug)]
 pub enum StorageError {
-    HeadDataFile(String),
-    HeapAppend(String),
-    HeapSeek(String),
-    HeapFlush(String),
-    HeapFSync(String),
-    HeapRead(String),
+    Open(String),
+    Seek(String),
+    Read(String),
+    Write(String),
+    Flush(String),
+    Sync(String),
+    InvalidRecordSize,
+    TruncatedRecord { expected: usize, actual: usize },
     HeapCorruptedRecord(String),
     ListChainCorruptedRecord(String),
 }
 
-impl StorageError {
-    pub fn to_string(&self) -> String {
+impl fmt::Display for StorageError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StorageError::HeadDataFile(msg) => format!("HeadDataFile: {}", msg),
-            StorageError::HeapAppend(msg) => format!("HeapAppend: {}", msg),
-            StorageError::HeapSeek(msg) => format!("HeapSeek: {}", msg),
-            StorageError::HeapFlush(msg) => format!("HeapFlush: {}", msg),
-            StorageError::HeapFSync(msg) => format!("HeapFSync: {}", msg),
-            StorageError::HeapRead(msg) => format!("HeapRead: {}", msg),
-            StorageError::HeapCorruptedRecord(msg) => {
-                format!("HeapCorruptedRecord: {}", msg)
-            },
-            StorageError::ListChainCorruptedRecord(msg) => {
-                format!("ListChainCorruptedRecord: {}", msg)
+            StorageError::Open(message) => write!(formatter, "Open: {message}"),
+            StorageError::Seek(message) => write!(formatter, "Seek: {message}"),
+            StorageError::Read(message) => write!(formatter, "Read: {message}"),
+            StorageError::Write(message) => write!(formatter, "Write: {message}"),
+            StorageError::Flush(message) => write!(formatter, "Flush: {message}"),
+            StorageError::Sync(message) => write!(formatter, "Sync: {message}"),
+            StorageError::InvalidRecordSize => write!(formatter, "InvalidRecordSize"),
+            StorageError::TruncatedRecord { expected, actual } => {
+                write!(
+                    formatter,
+                    "TruncatedRecord: expected {expected} bytes, read {actual}"
+                )
+            }
+            StorageError::HeapCorruptedRecord(message) => {
+                write!(formatter, "HeapCorruptedRecord: {message}")
+            }
+            StorageError::ListChainCorruptedRecord(message) => {
+                write!(formatter, "ListChainCorruptedRecord: {message}")
             }
         }
     }
 }
+
+impl std::error::Error for StorageError {}
