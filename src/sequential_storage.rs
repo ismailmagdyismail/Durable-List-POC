@@ -4,12 +4,12 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{sequential_access::SequentialWriter, storage_errors::StorageError};
+use crate::{storage_codec::StorageEncoder, storage_errors::StorageError};
 
 #[derive(Debug)]
 pub struct SequentialStorage<T>
 where
-    T: SequentialWriter,
+    T: StorageEncoder,
 {
     buff_writer: BufWriter<File>,
     writer: T,
@@ -17,12 +17,12 @@ where
 
 impl<T> SequentialStorage<T>
 where
-    T: SequentialWriter,
-    T::ReaderType: SequentialWriter,
+    T: StorageEncoder,
+    T::ReaderType: StorageEncoder,
 {
     pub fn new(
         file_path: PathBuf,
-    ) -> Result<SequentialStorage<<T as SequentialWriter>::ReaderType>, StorageError> {
+    ) -> Result<SequentialStorage<<T as StorageEncoder>::ReaderType>, StorageError> {
         let mut options = OpenOptions::new();
         options.create(true).append(true).write(true);
         let file = options

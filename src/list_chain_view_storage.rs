@@ -1,5 +1,6 @@
-use crate::sequential_access::{SequentialReader, SequentialWriter};
 use std::path::PathBuf;
+
+use crate::storage_codec::{StorageDecoder, StorageEncoder};
 
 pub const PREV_OFFSET: u8 = 8;
 pub const NODE_OFFSET: u8 = 8;
@@ -24,7 +25,7 @@ impl ListChainViewStorage {
     }
 }
 
-impl SequentialWriter for ListChainViewStorage {
+impl StorageEncoder for ListChainViewStorage {
     type ReaderType = ListChainViewStorage;
     type RecordType = ListChainNode;
 
@@ -50,7 +51,7 @@ impl SequentialWriter for ListChainViewStorage {
     }
 }
 
-impl SequentialReader for ListChainViewStorage {
+impl StorageDecoder for ListChainViewStorage {
     type ReaderType = ListChainViewStorage;
     type RecordType = ListChainNode;
 
@@ -123,17 +124,17 @@ mod tests {
 
     #[test]
     fn reports_twenty_four_byte_records_for_reading_and_writing() {
-        let writer = <ListChainViewStorage as SequentialWriter>::new();
-        let reader = <ListChainViewStorage as SequentialReader>::new();
+        let writer = <ListChainViewStorage as StorageEncoder>::new();
+        let reader = <ListChainViewStorage as StorageDecoder>::new();
 
-        assert_eq!(SequentialWriter::get_record_size(&writer), RECORD_SIZE);
-        assert_eq!(SequentialReader::get_record_size(&reader), RECORD_SIZE);
+        assert_eq!(StorageEncoder::get_record_size(&writer), RECORD_SIZE);
+        assert_eq!(StorageDecoder::get_record_size(&reader), RECORD_SIZE);
     }
 
     #[test]
     fn encodes_and_decodes_node_offsets_as_little_endian() {
-        let writer = <ListChainViewStorage as SequentialWriter>::new();
-        let reader = <ListChainViewStorage as SequentialReader>::new();
+        let writer = <ListChainViewStorage as StorageEncoder>::new();
+        let reader = <ListChainViewStorage as StorageDecoder>::new();
         let node = ListChainNode {
             prev_offset: 1,
             node_offset: u64::MAX,
@@ -154,7 +155,7 @@ mod tests {
 
     #[test]
     fn rejects_truncated_records() {
-        let reader = <ListChainViewStorage as SequentialReader>::new();
+        let reader = <ListChainViewStorage as StorageDecoder>::new();
 
         for length in [0, 7, 8, 15, 16, 23] {
             let error = reader

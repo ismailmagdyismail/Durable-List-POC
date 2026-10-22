@@ -1,6 +1,6 @@
 use crate::storage_errors::StorageError;
 
-pub trait SequentialWriter {
+pub trait StorageEncoder {
     type ReaderType;
     type RecordType;
 
@@ -9,7 +9,7 @@ pub trait SequentialWriter {
     fn encode_record(&self, record: &Self::RecordType, slice: &mut [u8]);
 }
 
-pub trait SequentialReader {
+pub trait StorageDecoder {
     type ReaderType;
     type RecordType;
 

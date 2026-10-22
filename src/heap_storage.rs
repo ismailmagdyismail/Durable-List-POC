@@ -1,5 +1,5 @@
 use crate::{
-    sequential_access::{SequentialReader, SequentialWriter},
+    storage_codec::{StorageDecoder, StorageEncoder},
     storage_errors::StorageError,
 };
 use std::path::PathBuf;
@@ -17,7 +17,7 @@ impl HeapStorage {
     }
 }
 
-impl SequentialWriter for HeapStorage {
+impl StorageEncoder for HeapStorage {
     type ReaderType = HeapStorage;
     type RecordType = i32;
 
@@ -34,7 +34,7 @@ impl SequentialWriter for HeapStorage {
     }
 }
 
-impl SequentialReader for HeapStorage {
+impl StorageDecoder for HeapStorage {
     type ReaderType = HeapStorage;
     type RecordType = i32;
 
@@ -59,6 +59,8 @@ pub const HEAP_FILE_NAME: &'static str = "heap.dat";
 
 #[cfg(test)]
 mod tests {
+    use crate::storage_codec::StorageDecoder;
+
     use super::*;
 
     #[test]
@@ -71,17 +73,17 @@ mod tests {
 
     #[test]
     fn reports_four_byte_records_for_reading_and_writing() {
-        let writer = <HeapStorage as SequentialWriter>::new();
-        let reader = <HeapStorage as SequentialReader>::new();
+        let writer = <HeapStorage as StorageEncoder>::new();
+        let reader = <HeapStorage as StorageDecoder>::new();
 
-        assert_eq!(SequentialWriter::get_record_size(&writer), RECORD_SIZE);
-        assert_eq!(SequentialReader::get_record_size(&reader), RECORD_SIZE);
+        assert_eq!(StorageEncoder::get_record_size(&writer), RECORD_SIZE);
+        assert_eq!(StorageDecoder::get_record_size(&reader), RECORD_SIZE);
     }
 
     #[test]
     fn encodes_and_decodes_i32_values_as_little_endian() {
-        let writer = <HeapStorage as SequentialWriter>::new();
-        let reader = <HeapStorage as SequentialReader>::new();
+        let writer = <HeapStorage as StorageEncoder>::new();
+        let reader = <HeapStorage as StorageDecoder>::new();
 
         for record in [0, 1, -1, i32::MIN, i32::MAX] {
             let mut buffer = [0; RECORD_SIZE as usize];
@@ -94,7 +96,7 @@ mod tests {
 
     #[test]
     fn rejects_records_that_are_not_four_bytes() {
-        let reader = <HeapStorage as SequentialReader>::new();
+        let reader = <HeapStorage as StorageDecoder>::new();
 
         let error = reader.decode_record(&[0; 3]).unwrap_err();
 

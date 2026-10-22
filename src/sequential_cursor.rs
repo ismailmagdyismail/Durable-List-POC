@@ -4,11 +4,11 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{sequential_access::SequentialReader, storage_errors::StorageError};
+use crate::{storage_codec::StorageDecoder, storage_errors::StorageError};
 
 pub struct SequentialCursor<T>
 where
-    T: SequentialReader,
+    T: StorageDecoder,
 {
     buff_reader: BufReader<File>,
     reader: T,
@@ -16,12 +16,12 @@ where
 
 impl<T> SequentialCursor<T>
 where
-    T: SequentialReader,
-    T::ReaderType: SequentialReader,
+    T: StorageDecoder,
+    T::ReaderType: StorageDecoder,
 {
     pub fn new(
         file_path: PathBuf,
-    ) -> Result<SequentialCursor<<T as SequentialReader>::ReaderType>, StorageError> {
+    ) -> Result<SequentialCursor<<T as StorageDecoder>::ReaderType>, StorageError> {
         let mut options = OpenOptions::new();
         let file = options.read(true).open(file_path).map_err(|err| {
             return StorageError::HeadDataFile(err.to_string());
