@@ -107,3 +107,62 @@ impl SequentialReader for ListChainViewStorage {
         Ok(chain_node)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage_errors::StorageError;
+
+    #[test]
+    fn creates_list_chain_path_in_storage_directory() {
+        assert_eq!(
+            ListChainViewStorage::create_list_chain_file_path("storage"),
+            PathBuf::from("storage").join(LIST_CHAIN_FILE_NAME)
+        );
+    }
+
+    #[test]
+    fn reports_twenty_four_byte_records_for_reading_and_writing() {
+        let writer = <ListChainViewStorage as SequentialWriter>::new();
+        let reader = <ListChainViewStorage as SequentialReader>::new();
+
+        assert_eq!(SequentialWriter::get_record_size(&writer), RECORD_SIZE);
+        assert_eq!(SequentialReader::get_record_size(&reader), RECORD_SIZE);
+    }
+
+    #[test]
+    fn encodes_and_decodes_node_offsets_as_little_endian() {
+        let writer = <ListChainViewStorage as SequentialWriter>::new();
+        let reader = <ListChainViewStorage as SequentialReader>::new();
+        let node = ListChainNode {
+            prev_offset: 1,
+            node_offset: u64::MAX,
+            next_offset: 0x0102_0304_0506_0708,
+        };
+        let mut buffer = [0; RECORD_SIZE as usize];
+
+        writer.encode_record(&node, &mut buffer);
+        let decoded = reader.decode_record(&buffer).unwrap();
+
+        assert_eq!(&buffer[0..8], &node.prev_offset.to_le_bytes());
+        assert_eq!(&buffer[8..16], &node.node_offset.to_le_bytes());
+        assert_eq!(&buffer[16..24], &node.next_offset.to_le_bytes());
+        assert_eq!(decoded.prev_offset, node.prev_offset);
+        assert_eq!(decoded.node_offset, node.node_offset);
+        assert_eq!(decoded.next_offset, node.next_offset);
+    }
+
+    #[test]
+    fn rejects_truncated_records() {
+        let reader = <ListChainViewStorage as SequentialReader>::new();
+
+        for length in [0, 7, 8, 15, 16, 23] {
+            let error = reader
+                .decode_record(&vec![0; length])
+                .err()
+                .expect("truncated record should fail to decode");
+
+            assert!(matches!(error, StorageError::ListChainCorruptedRecord(_)));
+        }
+    }
+}

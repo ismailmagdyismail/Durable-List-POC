@@ -56,3 +56,48 @@ impl SequentialReader for HeapStorage {
 }
 
 pub const HEAP_FILE_NAME: &'static str = "heap.dat";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn creates_heap_path_in_storage_directory() {
+        assert_eq!(
+            HeapStorage::create_heap_file_path("storage"),
+            PathBuf::from("storage").join(HEAP_FILE_NAME)
+        );
+    }
+
+    #[test]
+    fn reports_four_byte_records_for_reading_and_writing() {
+        let writer = <HeapStorage as SequentialWriter>::new();
+        let reader = <HeapStorage as SequentialReader>::new();
+
+        assert_eq!(SequentialWriter::get_record_size(&writer), RECORD_SIZE);
+        assert_eq!(SequentialReader::get_record_size(&reader), RECORD_SIZE);
+    }
+
+    #[test]
+    fn encodes_and_decodes_i32_values_as_little_endian() {
+        let writer = <HeapStorage as SequentialWriter>::new();
+        let reader = <HeapStorage as SequentialReader>::new();
+
+        for record in [0, 1, -1, i32::MIN, i32::MAX] {
+            let mut buffer = [0; RECORD_SIZE as usize];
+            writer.encode_record(&record, &mut buffer);
+
+            assert_eq!(buffer, record.to_le_bytes());
+            assert_eq!(reader.decode_record(&buffer).unwrap(), record);
+        }
+    }
+
+    #[test]
+    fn rejects_records_that_are_not_four_bytes() {
+        let reader = <HeapStorage as SequentialReader>::new();
+
+        let error = reader.decode_record(&[0; 3]).unwrap_err();
+
+        assert!(matches!(error, StorageError::HeapCorruptedRecord(_)));
+    }
+}
