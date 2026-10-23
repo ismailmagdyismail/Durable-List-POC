@@ -1,6 +1,14 @@
 # Architecture
 
-![DurableList Architecture](docs/arch_v2.svg)
+#### NOTE NOT FULLY Implemented yet
+
+### Missing
+
+- Indexes allocation Desing, Impl
+- WriteBuffer and BgFlusher Integration Into the Engine
+- WAL impl
+- Cache(s)
+  ![DurableList Architecture](docs/arch_v3.svg)
 
 # Architecture Notes, Limitiations
 
@@ -15,6 +23,8 @@
 
 - Since No Force, Single Threaded Transactions, Thus Nodes Indecies could be allocated by storage engine
 - Since transactions are sequential, Max_Index is incremented only after Commit
+- REQUIRES (Re-Design OR On Transaction commit validation) When BG Flusher and WriteBuffer are integrated, since this makes id increments Async, thus newly created transactions may see and ID snapshot that is yet to be incremented (since writes may still be in WriteBuffer or in flush process by BGFlusherWorker)
+  OR Decouple LIST SiZE METADATA FROM DISK, BG FLUSHER (should be seprate component, updated only on successfully commit)
 
 ## MVCC Support
 
