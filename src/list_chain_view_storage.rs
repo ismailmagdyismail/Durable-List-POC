@@ -1,4 +1,8 @@
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufReader, Read, Seek},
+    path::PathBuf,
+};
 
 use crate::{
     append_storage_writer::AppendStorageWriter, in_place_storage_writer::InPlaceStorageWriter,
@@ -20,6 +24,7 @@ pub struct ListChainViewStorage {
     file_path: PathBuf,
     sequential_writer: AppendStorageWriter,
     in_place_writer: InPlaceStorageWriter,
+    random_reader: BufReader<File>,
 }
 
 impl ListChainViewStorage {
@@ -34,10 +39,16 @@ impl ListChainViewStorage {
         let mut in_place_writer = InPlaceStorageWriter::open(file_path.clone())?;
         Self::zero_out_0th_index(&mut in_place_writer, &mut sequential_writer)?;
 
+        let metadata_file: File = File::open(&file_path).map_err(|_| {
+            StorageError::Open("Cannot open metadata file for Random reads".to_string())
+        })?;
+        let random_reader = BufReader::new(metadata_file);
+
         Ok(Self {
             file_path,
             sequential_writer,
             in_place_writer,
+            random_reader,
         })
     }
 
@@ -51,6 +62,26 @@ impl ListChainViewStorage {
         let count =
             (file_end_offset - Self::nth_node_offset(0)) / ListChainNodeCodec::RECORD_SIZE as u64;
         Ok(count as u32)
+    }
+
+    pub fn get_metadata_node(&mut self, index: u32) -> Result<Option<ListChainNode>, StorageError> {
+        if index >= self.get_nodes_count()? {
+            return Ok(None);
+        }
+
+        self.random_reader
+            .seek(std::io::SeekFrom::Start(Self::nth_node_offset(index)))
+            .map_err(|err| {
+                let fmt_error = format!("Error in MetaData Random Read Seek {}", err);
+                StorageError::Seek(fmt_error)
+            })?;
+        let mut buffer = Vec::new();
+        buffer.resize(ListChainNodeCodec::RECORD_SIZE, b'0');
+        self.random_reader.read_exact(&mut buffer).map_err(|_| {
+            StorageError::Read("metadata Read Corruption on Random Read".to_string())
+        })?;
+        let record = ListChainNodeCodec::decode_record(&buffer)?;
+        Ok(Some(record))
     }
 
     pub fn insert_node(&mut self, index: u32, node_offset: u64) -> Result<(), StorageError> {

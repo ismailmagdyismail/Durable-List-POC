@@ -1,15 +1,19 @@
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufReader, Read, Seek},
+    path::PathBuf,
+};
 
 use crate::{
-    heap_records_codec::HeapRecordsCodec,
-    sequential_cursor::SequentialCursor, append_storage_writer::AppendStorageWriter,
-    storage_errors::StorageError,
+    append_storage_writer::AppendStorageWriter, heap_records_codec::HeapRecordsCodec,
+    sequential_cursor::SequentialCursor, storage_errors::StorageError,
 };
 
 #[derive(Debug)]
 pub struct HeapStorage {
     file_path: PathBuf,
     access: AppendStorageWriter,
+    random_read_buffer: BufReader<File>,
 }
 
 impl HeapStorage {
@@ -22,7 +26,16 @@ impl HeapStorage {
     pub fn open(file_path: PathBuf) -> Result<Self, StorageError> {
         let access = AppendStorageWriter::open(file_path.clone())?;
 
-        Ok(Self { file_path, access })
+        let heap_file: File = File::open(&file_path).map_err(|_| {
+            StorageError::Open("Cannot open Heap file for Random reads".to_string())
+        })?;
+        let random_reader = BufReader::new(heap_file);
+
+        Ok(Self {
+            file_path,
+            access,
+            random_read_buffer: random_reader,
+        })
     }
 
     pub fn append(&mut self, records: &[i32]) -> Result<u64, StorageError> {
@@ -32,6 +45,25 @@ impl HeapStorage {
         }
 
         self.access.append(&bytes)
+    }
+
+    pub fn read_record(&mut self, offset: u64) -> Result<i32, StorageError> {
+        let mut buffer = Vec::new();
+        buffer.resize(HeapRecordsCodec::RECORD_SIZE, b'0');
+
+        self.random_read_buffer
+            .seek(std::io::SeekFrom::Start(offset))
+            .map_err(|err| {
+                let fmt_error = format!("Error in MetaData Random Read Seek {}", err);
+                StorageError::Seek(fmt_error)
+            })?;
+
+        self.random_read_buffer
+            .read_exact(&mut buffer)
+            .map_err(|err| StorageError::HeapCorruptedRecord(err.to_string()))?;
+
+        let record = HeapRecordsCodec::decode_record(&buffer)?;
+        Ok(record)
     }
 
     pub fn sync(&mut self) -> Result<(), StorageError> {
