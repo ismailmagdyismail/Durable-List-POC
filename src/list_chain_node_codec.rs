@@ -8,6 +8,26 @@ impl ListChainNodeCodec {
     pub const NEXT_OFFSET: usize = 8;
     pub const RECORD_SIZE: usize = Self::PREV_OFFSET + Self::NODE_OFFSET + Self::NEXT_OFFSET;
 
+    pub fn calculate_next_offset(starting_offset: u64) -> u64 {
+        starting_offset + Self::PREV_OFFSET as u64 + Self::NODE_OFFSET as u64
+    }
+
+    pub fn calculate_node_offset(starting_offset: u64) -> u64 {
+        starting_offset + Self::PREV_OFFSET as u64
+    }
+
+    pub fn encode_record_prev_offset(prev_offset: u64) -> [u8; Self::PREV_OFFSET] {
+        let mut bytes = [0; Self::PREV_OFFSET];
+        bytes.copy_from_slice(&prev_offset.to_le_bytes());
+        bytes
+    }
+
+    pub fn encode_record_node_offset(node_offset: u64) -> [u8; Self::NODE_OFFSET] {
+        let mut bytes = [0; Self::NODE_OFFSET];
+        bytes.copy_from_slice(&node_offset.to_le_bytes());
+        bytes
+    }
+
     pub fn encode_record(node: &ListChainNode) -> [u8; Self::RECORD_SIZE] {
         let mut bytes = [0; Self::RECORD_SIZE];
         bytes[0..Self::PREV_OFFSET].copy_from_slice(&node.prev_offset.to_le_bytes());
@@ -25,11 +45,10 @@ impl ListChainNodeCodec {
             ));
         }
 
-        let prev_offset = u64::from_le_bytes(
-            bytes[0..Self::PREV_OFFSET].try_into().map_err(|_| {
+        let prev_offset =
+            u64::from_le_bytes(bytes[0..Self::PREV_OFFSET].try_into().map_err(|_| {
                 StorageError::ListChainCorruptedRecord("Corrupted prev_offset".to_string())
-            })?,
-        );
+            })?);
         let node_offset = u64::from_le_bytes(
             bytes[Self::PREV_OFFSET..Self::PREV_OFFSET + Self::NODE_OFFSET]
                 .try_into()

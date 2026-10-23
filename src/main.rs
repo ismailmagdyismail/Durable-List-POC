@@ -36,7 +36,7 @@ fn main() {
         node_offset: 0,
         next_offset: 4,
     }];
-    chain_storage.append(&list).unwrap();
+    chain_storage.insert_node(0, list[0].node_offset).unwrap();
     chain_storage.sync().unwrap();
     let mut cursor = chain_storage.cursor().unwrap();
     while let Ok(res) = cursor.next_record() {

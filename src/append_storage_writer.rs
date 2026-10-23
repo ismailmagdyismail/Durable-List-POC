@@ -53,4 +53,10 @@ impl AppendStorageWriter {
             .sync_all()
             .map_err(|error| StorageError::Sync(error.to_string()))
     }
+
+    pub fn get_offset(&mut self) -> Result<u64, StorageError> {
+        self.writer
+            .stream_position()
+            .map_err(|error| StorageError::Seek(error.to_string()))
+    }
 }

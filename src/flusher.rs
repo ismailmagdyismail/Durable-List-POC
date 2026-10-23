@@ -48,7 +48,6 @@ impl FlushWorker {
         // Block until a buffer arrives or all senders are dropped.
         while let Ok(bg_write_buffer) = receiver.recv() {
             for (&idx, &node_val) in bg_write_buffer.iter() {
-                println!("node {} {}", idx, node_val);
                 storage_engine.write_node(idx, node_val).unwrap();
             }
         }
